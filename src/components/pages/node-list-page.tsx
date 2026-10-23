@@ -157,7 +157,7 @@ export function NodeListPage() {
                     <th className="hidden px-3 py-2.5 text-left font-medium md:table-cell">Link</th>
                     <th className="hidden px-3 py-2.5 text-left font-medium xl:table-cell">Clients</th>
                     <th className="hidden px-3 py-2.5 text-left font-medium 2xl:table-cell">Modules</th>
-                    <th className="px-4 py-2.5 text-right font-medium">Heartbeat</th>
+                    <th className="px-4 py-2.5 text-right font-medium">Last contact</th>
                     <th className="w-8" />
                   </tr>
                 </thead>
@@ -213,8 +213,15 @@ export function NodeListPage() {
                             )}
                           </div>
                         </td>
-                        <td className="px-4 py-3 text-right text-xs tabular-nums text-muted-foreground">
-                          {timeAgo(n.last_heartbeat)}
+                        <td
+                          className="px-4 py-3 text-right text-xs tabular-nums text-muted-foreground"
+                          title={n.last_contact_source === 'gateway_report'
+                            ? 'Most recent report observed through the USB gateway; not a device heartbeat.'
+                            : n.last_contact_source === 'heartbeat'
+                              ? 'Most recent authenticated device heartbeat.'
+                              : 'No gateway report or heartbeat has been recorded.'}
+                        >
+                          {timeAgo(n.last_contact_at)}
                         </td>
                         <td className="pr-3">
                           <ChevronRight className="h-4 w-4 text-muted-foreground" />

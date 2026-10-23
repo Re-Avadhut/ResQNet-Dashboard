@@ -307,7 +307,7 @@ export function OverviewPage() {
                 Node health
               </CardTitle>
               <CardDescription className="mt-1 text-xs">
-                Live heartbeats, battery and link state.
+                Recent gateway contact; battery and link metrics appear when heartbeats report them.
               </CardDescription>
             </div>
             <FreshnessLabel timestamp={data.freshness.last_updated_at} />
@@ -321,7 +321,7 @@ export function OverviewPage() {
                     <th className="px-2 py-2 text-left font-medium">State</th>
                     <th className="hidden px-2 py-2 text-left font-medium sm:table-cell">Battery</th>
                     <th className="hidden px-2 py-2 text-left font-medium md:table-cell">Link</th>
-                    <th className="px-4 py-2 text-right font-medium">Heartbeat</th>
+                    <th className="px-4 py-2 text-right font-medium">Last contact</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -349,8 +349,15 @@ export function OverviewPage() {
                         <td className="hidden px-2 py-2.5 md:table-cell">
                           <LinkQualityBar quality={n.link_quality} />
                         </td>
-                        <td className="px-4 py-2.5 text-right text-xs tabular-nums text-muted-foreground">
-                          {timeAgo(n.last_heartbeat)}
+                        <td
+                          className="px-4 py-2.5 text-right text-xs tabular-nums text-muted-foreground"
+                          title={n.last_contact_source === 'gateway_report'
+                            ? 'Most recent report observed through the USB gateway; not a device heartbeat.'
+                            : n.last_contact_source === 'heartbeat'
+                              ? 'Most recent authenticated device heartbeat.'
+                              : 'No gateway report or heartbeat has been recorded.'}
+                        >
+                          {timeAgo(n.last_contact_at)}
                         </td>
                       </tr>
                     )

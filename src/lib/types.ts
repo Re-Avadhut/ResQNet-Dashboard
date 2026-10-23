@@ -25,6 +25,7 @@ export type LoginResponse = {
 
 export type NodeLifecycle = 'REGISTERED' | 'DEPLOYED' | 'MAINTENANCE' | 'RETIRED'
 export type RuntimeState = 'online' | 'offline' | 'stale' | 'fault'
+export type NodeContactSource = 'heartbeat' | 'gateway_report' | null
 export type ModuleStatus =
   | 'PRESENT_ONLINE'
   | 'PRESENT_DEGRADED'
@@ -39,6 +40,8 @@ export type NodeSummary = {
   runtime_state: RuntimeState
   online: boolean
   last_heartbeat: string | null
+  last_contact_at: string | null
+  last_contact_source: NodeContactSource
   battery: number | null
   supply_voltage: number | null
   link_quality: number | null
@@ -112,6 +115,8 @@ export type NodeModule = {
   capabilities: string
   firmware_version: string | null
   last_seen_at: string | null
+  last_sample_json: string | null
+  last_sample_received_at: string | null
 }
 
 export type NodeDetail = {
@@ -130,6 +135,8 @@ export type NodeDetail = {
   updated_at: string
   runtime_state: RuntimeState
   online: boolean
+  last_contact_at: string | null
+  last_contact_source: NodeContactSource
   latest_heartbeat: NodeHeartbeat | null
   latest_location: NodeLocation | null
   heartbeat_history: NodeHeartbeat[]
@@ -277,6 +284,9 @@ export type OverviewResponse = {
     online: boolean
     health_state: string
     last_heartbeat: string | null
+    last_contact_at: string | null
+    last_contact_source: NodeContactSource
+    runtime_state: RuntimeState
     battery: number | null
     link_quality: number | null
     connected_clients: number | null

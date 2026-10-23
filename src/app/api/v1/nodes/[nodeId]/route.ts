@@ -1,4 +1,5 @@
 import { db } from '@/lib/db'
+import { deriveNodeRuntimeState } from '@/lib/node-runtime'
 import { getCurrentOperator, handleError, requireRole, audit, NotFoundError } from '@/lib/auth'
 
 export const dynamic = 'force-dynamic'
@@ -27,20 +28,20 @@ export async function GET(_req: Request, { params }: Params) {
     if (!node) throw new NotFoundError()
 
     const hb = node.heartbeats[0]
-    const heartbeatStaleAfter = new Date(Date.now() - 5 * 60_000)
-    const isOnline = !!hb && hb.received_at > heartbeatStaleAfter
-    let runtime_state: 'online' | 'offline' | 'stale' | 'fault'
-    if (!hb) runtime_state = 'offline'
-    else if (hb.received_at <= heartbeatStaleAfter) runtime_state = 'offline'
-    else if (hb.health_state === 'FAULT') runtime_state = 'fault'
-    else if (hb.health_state === 'DEGRADED') runtime_state = 'stale'
-    else runtime_state = 'online'
+    const runtime = deriveNodeRuntimeState({
+      heartbeatReceivedAt: hb?.received_at,
+      gatewayContactAt: node.last_gateway_contact_at,
+      heartbeatHealthState: hb?.health_state,
+      lifecycleState: node.lifecycle_state,
+    })
 
     return Response.json({
       ...node,
       auth_secret: undefined, // never leak
-      runtime_state,
-      online: isOnline,
+      runtime_state: runtime.runtime_state,
+      online: runtime.online,
+      last_contact_at: runtime.last_contact_at?.toISOString() ?? null,
+      last_contact_source: runtime.last_contact_source,
       latest_heartbeat: hb ?? null,
       latest_location: node.locations[0] ?? null,
       heartbeat_history: node.heartbeats,

@@ -112,7 +112,14 @@ export function NodeDetailPage({ nodeId }: { nodeId: string }) {
         </div>
         {overview && (
           <div className="text-right">
-            <FreshnessLabel timestamp={node.latest_heartbeat?.received_at ?? null} label="Last seen" />
+            <FreshnessLabel timestamp={node.last_contact_at} label="Last contact" />
+            <p className="mt-1 text-[10px] text-muted-foreground">
+              {node.last_contact_source === 'gateway_report'
+                ? 'Observed via gateway report'
+                : node.last_contact_source === 'heartbeat'
+                  ? 'Device heartbeat'
+                  : 'No contact recorded'}
+            </p>
           </div>
         )}
       </div>

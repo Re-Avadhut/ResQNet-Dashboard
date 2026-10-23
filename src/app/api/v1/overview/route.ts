@@ -1,5 +1,6 @@
 import { db } from '@/lib/db'
 import { getCurrentOperator, handleError } from '@/lib/auth'
+import { deriveNodeRuntimeState } from '@/lib/node-runtime'
 
 export const dynamic = 'force-dynamic'
 
@@ -12,8 +13,6 @@ export async function GET() {
     }
 
     const now = new Date()
-    const heartbeatStaleAfter = new Date(now.getTime() - 5 * 60_000) // 5 min
-
     const nodes = await db.node.findMany({
       include: {
         heartbeats: { orderBy: { received_at: 'desc' }, take: 1 },
@@ -26,22 +25,28 @@ export async function GET() {
     let fault = 0
     const nodeHealth = nodes.map((n) => {
       const hb = n.heartbeats[0]
-      const isOnline = !!hb && hb.received_at > heartbeatStaleAfter
-      if (isOnline) {
-        if (hb.health_state === 'FAULT') fault++
-        else if (hb.health_state === 'DEGRADED') stale++
-        else online++
-      } else {
-        if (n.lifecycle_state === 'MAINTENANCE' || n.lifecycle_state === 'RETIRED') offline++
-        else stale++
-      }
+      const runtime = deriveNodeRuntimeState({
+        now,
+        heartbeatReceivedAt: hb?.received_at,
+        gatewayContactAt: n.last_gateway_contact_at,
+        heartbeatHealthState: hb?.health_state,
+        lifecycleState: n.lifecycle_state,
+      })
+      if (runtime.runtime_state === 'online') online++
+      else if (runtime.runtime_state === 'fault') fault++
+      else if (runtime.runtime_state === 'stale') stale++
+      else offline++
+
       return {
         id: n.id,
         display_name: n.display_name,
         lifecycle_state: n.lifecycle_state,
-        online: isOnline,
+        runtime_state: runtime.runtime_state,
+        online: runtime.online,
         health_state: hb?.health_state ?? 'UNKNOWN',
         last_heartbeat: hb?.received_at ?? null,
+        last_contact_at: runtime.last_contact_at?.toISOString() ?? null,
+        last_contact_source: runtime.last_contact_source,
         battery: hb?.battery ?? null,
         link_quality: hb?.link_quality ?? null,
         connected_clients: hb?.connected_clients ?? null,

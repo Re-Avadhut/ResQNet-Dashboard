@@ -1,15 +1,11 @@
 'use client'
 
-import { useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
 import { StatusBadge } from '@/components/shared/status-badge'
 import {
   Cpu,
   Satellite,
   Camera,
-  Compass,
   Thermometer,
   Activity,
   Lock,
@@ -17,8 +13,6 @@ import {
   AlertTriangle,
   Radio,
   Zap,
-  Send,
-  ShieldCheck,
 } from 'lucide-react'
 import {
   MODULE_STATUS_LABELS,
@@ -29,6 +23,7 @@ import {
 } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import type { NodeModule, NodeLocation } from '@/lib/types'
+import { parseImuSample } from '@/lib/imu-telemetry'
 
 type DynamicModuleGridProps = {
   node: {
@@ -45,9 +40,8 @@ type DynamicModuleGridProps = {
  * Capability-driven module grid (spec §6.6):
  *   - Renders only known, allowlisted module types.
  *   - For GPS: shows current fix or "no fix" message (never shows stale as current).
- *   - For Camera: shows capture controls (mocked).
- *   - For IMU: shows motion/tilt (mocked).
- *   - For Environment: shows temp/humidity/pressure (mocked).
+ *   - For IMU: displays only the latest validated sample stored by the gateway API.
+ *   - Camera and environment functionality stays explicitly unavailable until live integrations exist.
  *   - For unknown/invalid: shows a safe diagnostic message; never executes arbitrary code.
  */
 export function DynamicModuleGrid({ node }: DynamicModuleGridProps) {
@@ -234,78 +228,72 @@ function ModuleBody({
 }
 
 function CameraControls({ module }: { module: NodeModule }) {
-  const [lastCapture, setLastCapture] = useState<string | null>(null)
-  const [capturing, setCapturing] = useState(false)
   const online = module.status === 'PRESENT_ONLINE'
-  const hasCap = module.capabilities.includes('photo_capture')
-
-  const capture = () => {
-    if (!online || !hasCap) return
-    setCapturing(true)
-    setTimeout(() => {
-      setCapturing(false)
-      setLastCapture(new Date().toISOString())
-    }, 700)
-  }
 
   return (
     <div className="space-y-2">
-      {!hasCap && (
-        <div className="text-[10px] text-muted-foreground">This camera module does not advertise photo_capture capability.</div>
-      )}
-      <Button
-        size="sm"
-        variant="outline"
-        onClick={capture}
-        disabled={!online || !hasCap || capturing}
-        className="w-full"
-      >
-        {capturing ? (
-          <>
-            <Zap className="mr-1 h-3 w-3 animate-pulse" /> Capturing…
-          </>
-        ) : (
-          <>
-            <Camera className="mr-1 h-3 w-3" /> Request photo capture
-          </>
-        )}
-      </Button>
-      {lastCapture && (
-        <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
-          <ShieldCheck className="h-3 w-3 text-success" />
-          Capture requested at {formatDateTime(lastCapture)}
-          <Badge variant="outline" className="ml-auto text-[9px]">QUEUED_FOR_NODE</Badge>
-        </div>
-      )}
-      {!online && (
-        <div className="text-[10px] text-danger">Camera is offline — capture unavailable.</div>
-      )}
+      <div className="rounded-md border border-warning/30 bg-warning/10 p-2 text-xs">
+        <p className="font-medium">Photo capture unavailable</p>
+        <p className="mt-1 text-muted-foreground">
+          The current firmware/API does not implement a camera command or capture acknowledgement.
+          No photo request has been sent.
+        </p>
+      </div>
+      <div className="text-[10px] text-muted-foreground">
+        Reported module status: {online ? 'online in the stored descriptor' : module.status}.
+        This status alone does not prove that a camera is connected or able to capture.
+      </div>
     </div>
   )
 }
 
 function ImuControls({ module }: { module: NodeModule }) {
   const online = module.status === 'PRESENT_ONLINE'
-  const hasMotion = module.capabilities.includes('motion')
-  const hasTilt = module.capabilities.includes('tilt')
+  const sample = parseImuSample(module.last_sample_json)
+  const hasSample = online && sample !== null
+  const motionLabel =
+    sample?.moving === true ? 'Moving' :
+    sample?.moving === false ? 'Stationary' :
+    'Not reported'
+  const formatMg = (value: number | null) => value === null ? '—' : String(value)
+  const formatDps = (value: number | null) => value === null ? '—' : (value / 10).toFixed(1)
 
   return (
-    <div className="space-y-1.5">
-      {hasMotion && (
-        <Row icon={<Activity className="h-3 w-3" />} label="Motion">
-          <span className={cn('tabular-nums', online ? 'text-success' : 'text-muted-foreground')}>
-            {online ? 'stable' : '—'}
-          </span>
-        </Row>
-      )}
-      {hasTilt && (
-        <Row icon={<Compass className="h-3 w-3" />} label="Tilt">
-          <span className="tabular-nums text-muted-foreground">{online ? '0.4°' : '—'}</span>
-        </Row>
-      )}
-      {!online && (
-        <div className="rounded-md border border-border bg-muted/30 p-1.5 text-[10px] text-muted-foreground">
-          IMU readings require module to be online.
+    <div className="space-y-2 text-xs">
+      <Row icon={<Activity className="h-3 w-3" />} label="Firmware motion flag">
+        <span className={cn('tabular-nums', hasSample ? 'text-foreground' : 'text-muted-foreground')}>
+          {hasSample ? motionLabel : 'No current sample'}
+        </span>
+      </Row>
+      {hasSample && sample ? (
+        <>
+          <div className="rounded-md border border-border bg-muted/30 p-2.5 space-y-2">
+            <div>
+              <p className="mb-1 text-[10px] uppercase tracking-wide text-muted-foreground">Acceleration (mg)</p>
+              <div className="grid grid-cols-3 gap-2 font-mono tabular-nums">
+                <span>X: {formatMg(sample.acceleration_mg.x)}</span>
+                <span>Y: {formatMg(sample.acceleration_mg.y)}</span>
+                <span>Z: {formatMg(sample.acceleration_mg.z)}</span>
+              </div>
+            </div>
+            <div>
+              <p className="mb-1 text-[10px] uppercase tracking-wide text-muted-foreground">Gyroscope (°/s)</p>
+              <div className="grid grid-cols-3 gap-2 font-mono tabular-nums">
+                <span>X: {formatDps(sample.gyro_dps10.x)}</span>
+                <span>Y: {formatDps(sample.gyro_dps10.y)}</span>
+                <span>Z: {formatDps(sample.gyro_dps10.z)}</span>
+              </div>
+            </div>
+          </div>
+          <p className="text-[10px] text-muted-foreground">
+            Received by dashboard: {formatDateTime(module.last_sample_received_at)}. Gyroscope firmware values are reported in 0.1°/s units and converted for display. The current telemetry payload has no source-capture timestamp.
+          </p>
+        </>
+      ) : (
+        <div className="rounded-md border border-border bg-muted/30 p-2 text-muted-foreground">
+          {online
+            ? 'The IMU is marked online, but no valid stored measurement sample is available.'
+            : 'IMU not detected. No live readings are shown.'}
         </div>
       )}
     </div>
@@ -313,23 +301,16 @@ function ImuControls({ module }: { module: NodeModule }) {
 }
 
 function EnvironmentControls({ module }: { module: NodeModule }) {
-  const online = module.status === 'PRESENT_ONLINE'
-  const caps = module.capabilities.split(',').filter(Boolean)
-
   return (
-    <div className="grid grid-cols-2 gap-1.5 text-xs">
-      {caps.includes('temp') && (
-        <Metric icon={<Thermometer className="h-3 w-3" />} label="Temp" value={online ? '28.4°C' : '—'} />
-      )}
-      {caps.includes('humidity') && (
-        <Metric icon={<Activity className="h-3 w-3" />} label="Humidity" value={online ? '74%' : '—'} />
-      )}
-      {caps.includes('pressure') && (
-        <Metric icon={<Activity className="h-3 w-3" />} label="Pressure" value={online ? '1012 hPa' : '—'} />
-      )}
-      {!online && caps.length === 0 && (
-        <div className="col-span-2 text-[10px] text-muted-foreground">No environment readings.</div>
-      )}
+    <div className="rounded-md border border-warning/30 bg-warning/10 p-2 text-xs">
+      <p className="font-medium">Live environment readings unavailable</p>
+      <p className="mt-1 text-muted-foreground">
+        The current gateway API does not ingest temperature, humidity or pressure samples.
+        No measurements are displayed for this module.
+      </p>
+      <p className="mt-1 text-[10px] text-muted-foreground">
+        Stored module status: {module.status}. A reported status is not a live environmental measurement.
+      </p>
     </div>
   )
 }
@@ -361,7 +342,7 @@ function Row({ icon, label, children }: { icon: React.ReactNode; label: string; 
 const MODULE_ICONS: Record<string, typeof Cpu> = {
   GPS: Satellite,
   CAMERA: Camera,
-  IMU: Compass,
+  IMU: Activity,
   ENVIRONMENT: Thermometer,
   LORA: Radio,
   BATTERY: Zap,

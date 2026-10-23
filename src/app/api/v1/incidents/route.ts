@@ -52,7 +52,7 @@ export async function GET(req: Request) {
         source_node: { select: { id: true, display_name: true } },
         events: { orderBy: { created_at: 'desc' }, take: 1 },
       },
-      orderBy: [{ priority: 'desc' }, { created_at: 'asc' }],
+      orderBy: [{ created_at: 'desc' }, { id: 'desc' }],
       take: limit,
     })
 

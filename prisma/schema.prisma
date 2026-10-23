@@ -91,6 +91,8 @@ model Node {
   deployment_locked_by String?
   deployment_locked_at DateTime?
   deployment_accuracy_m Float?
+  // Most recent contact inferred from a report received by the USB gateway; separate from heartbeat.
+  last_gateway_contact_at DateTime?
   created_at          DateTime      @default(now())
   updated_at          DateTime      @updatedAt
 
@@ -170,7 +172,10 @@ model Module {
   status          ModuleStatus @default(UNKNOWN)
   capabilities    String       // comma-separated capability tokens
   firmware_version String?
-  last_seen_at    DateTime?
+  last_seen_at     DateTime?
+  // Latest validated sensor sample, stored separately from capability tokens.
+  last_sample_json String?
+  last_sample_received_at   DateTime?
 
   node Node @relation(fields: [node_id], references: [id], onDelete: Cascade)
 

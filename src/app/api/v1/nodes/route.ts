@@ -1,4 +1,5 @@
 import { db } from '@/lib/db'
+import { deriveNodeRuntimeState } from '@/lib/node-runtime'
 import { getCurrentOperator, handleError, requireRole, audit } from '@/lib/auth'
 
 export const dynamic = 'force-dynamic'
@@ -15,7 +16,7 @@ export async function GET(req: Request) {
     const lifecycle = url.searchParams.get('lifecycle') // REGISTERED | DEPLOYED | MAINTENANCE | RETIRED
     const q = url.searchParams.get('q')?.toLowerCase()
     const limit = Math.min(200, Number(url.searchParams.get('limit') ?? 200))
-    const heartbeatStaleAfter = new Date(Date.now() - 5 * 60_000)
+    const now = new Date()
 
     const nodes = await db.node.findMany({
       where: {
@@ -33,24 +34,23 @@ export async function GET(req: Request) {
 
     const enriched = nodes.map((n) => {
       const hb = n.heartbeats[0]
-      const isOnline = !!hb && hb.received_at > heartbeatStaleAfter
-      let runtime_state: 'online' | 'offline' | 'stale' | 'fault'
-      if (!hb) runtime_state = 'offline'
-      else if (hb.received_at <= heartbeatStaleAfter) runtime_state = 'offline'
-      else if (hb.health_state === 'FAULT') runtime_state = 'fault'
-      else if (hb.health_state === 'DEGRADED') runtime_state = 'stale'
-      else runtime_state = 'online'
-
-      // for offline nodes that are in maintenance/retired, keep runtime_state as offline
-      if (n.lifecycle_state === 'RETIRED') runtime_state = 'offline'
+      const runtime = deriveNodeRuntimeState({
+        now,
+        heartbeatReceivedAt: hb?.received_at,
+        gatewayContactAt: n.last_gateway_contact_at,
+        heartbeatHealthState: hb?.health_state,
+        lifecycleState: n.lifecycle_state,
+      })
 
       return {
         id: n.id,
         display_name: n.display_name,
         lifecycle_state: n.lifecycle_state,
-        runtime_state,
-        online: isOnline,
+        runtime_state: runtime.runtime_state,
+        online: runtime.online,
         last_heartbeat: hb?.received_at ?? null,
+        last_contact_at: runtime.last_contact_at?.toISOString() ?? null,
+        last_contact_source: runtime.last_contact_source,
         battery: hb?.battery ?? null,
         supply_voltage: hb?.supply_voltage ?? null,
         link_quality: hb?.link_quality ?? null,

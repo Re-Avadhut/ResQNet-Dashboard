@@ -141,8 +141,10 @@ export function LeafletMap({ markers, center = DEFAULT_CENTER, zoom = 13, onMark
   return (
     <div
       ref={containerRef}
-      className="h-full w-full"
-      style={{ minHeight: '400px', background: 'var(--muted)' }}
+      // Contain Leaflet's high-z-index panes/controls inside the map stacking context.
+      // Without isolation, Leaflet controls can paint over unrelated dashboard screens.
+      className="relative isolate z-0 h-full w-full overflow-hidden"
+      style={{ minHeight: '400px', background: 'var(--muted)', isolation: 'isolate', zIndex: 0 }}
     />
   )
 }
